@@ -28,6 +28,7 @@ Built because every "Mac cleaner" app either ignores the dev-shaped 100 GB of ca
   - **Log-file runaways**: Wrangler logs (unbounded pre-v4.91), npm `_logs`, Ollama `server.log`, Homebrew install + `brew services` (postgres/mongo/nginx/mysql) logs, cloudflared service logs, `gh` workflow-log cache, Slack/Discord/Zoom/Teams/Notion/Spotify logs, macOS DiagnosticReports.
   - **macOS-only piles**: leftover `Install macOS *.app` installers in `/Applications`, Mail Downloads (current + legacy paths), GarageBand / Logic sound libraries, Apple Loops, downloaded Enhanced/Premium TTS voices.
   - **Root-owned macOS internals** (need `sudo` to clean): pending Software Update payloads in `/Library/Updates/<id>`, unified-log `tracev3` archives in `/private/var/db/diagnostics`, system-wide `/Library/Caches` + `/Library/Logs`, the per-user `DARWIN_USER_CACHE_DIR` under `/private/var/folders`, legacy Apple System Log archives.
+  - **Spotlight bloat**: `~/Library/Metadata/CoreSpotlight` subindexes (Priority / NSFileProtectionCompleteUntilFirstUserAuthentication / SpotlightKnowledgeEvents) flagged when >250 MB, plus the SIP-protected volume index at `/.Spotlight-V100`. Optimize tips cover excluding `node_modules` via Search Privacy, the `.metadata_never_index` marker, disabling indexing on external volumes, and the Recovery-Mode nuke for runaway volume indexes.
   - **System**: user caches & logs, Time Machine local snapshots, iOS device backups, Downloads.
 - **Classifies** each finding by risk:
   - 🟢 SAFE — caches the tool rebuilds on demand

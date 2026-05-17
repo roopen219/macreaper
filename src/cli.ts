@@ -51,6 +51,7 @@ import { scanJVM } from "./scanners/jvm.ts";
 import { scanMobile } from "./scanners/mobile.ts";
 import { scanLogs } from "./scanners/logs.ts";
 import { scanSystem, listLocalSnapshots, deleteLocalSnapshots } from "./scanners/system.ts";
+import { scanSpotlight } from "./scanners/spotlight.ts";
 import { scanWorktrees } from "./scanners/worktrees.ts";
 import { scanVersionManagers } from "./scanners/version-managers.ts";
 import { scanPkgBinaries } from "./scanners/pkg-binaries.ts";
@@ -345,6 +346,7 @@ const SCANNERS: Array<{
   { name: "cloud",             group: "Cloud & DevOps",   run: scanCloud },
   { name: "logs",              group: "Logs",             run: scanLogs },
   { name: "system",            group: "System",           run: scanSystem },
+  { name: "spotlight",         group: "System",           run: scanSpotlight },
   { name: "worktrees",         group: "Cursor worktrees", run: scanWorktrees },
   { name: "version-managers",  group: "Version managers", run: scanVersionManagers },
   { name: "pkg-binaries",      group: "Node ecosystem",   run: scanPkgBinaries },
