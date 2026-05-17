@@ -23,7 +23,13 @@ import {
   moveToTrash,
   runCleanCommand,
   isProcessRunning,
+  HOME,
 } from "./lib/utils.ts";
+
+// Trailing slash so we only match path prefixes, not e.g. `/Users/roopiX/...`.
+// We replace with "~/" (with slash) so shortened paths read like "~/work/foo".
+const HOME_PREFIX = HOME + "/";
+const TILDE_PREFIX = "~/";
 import { RISK_META, type CleanTarget } from "./lib/types.ts";
 import {
   readCache,
@@ -100,6 +106,43 @@ ${pc.bold("Safety:")}
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  ASCII BANNER                                                              */
 /* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Shorten a path for display in interactive prompts.
+ *
+ * Replaces $HOME with `~/` first. If the result still exceeds the visible
+ * column budget (terminal width minus a fixed ~20-char prompt-chrome
+ * allowance), we truncate from the left and prepend `…/`. Short paths are
+ * left alone — no point uglifying `~/work/foo/node_modules` for a 200-col
+ * terminal.
+ */
+function shortenPath(p: string, reserved = 20): string {
+  const tilde = p.replace(HOME_PREFIX, TILDE_PREFIX);
+  const cols = process.stdout.columns ?? 120;
+  const budget = Math.max(40, cols - reserved);
+  if (tilde.length <= budget) return tilde;
+  // Trim from the left until it fits; keep the tail so the user can still
+  // identify the project.
+  return "…/" + tilde.slice(tilde.length - budget + 2);
+}
+
+/**
+ * Cap a multiselect's visible-window height to the current terminal size.
+ *
+ * `@clack/prompts` already clamps internally (min 5, default Infinity) but
+ * it doesn't dynamically size to your terminal — pass a huge list and it
+ * tries to render every row, scrolling the cursor off-screen and breaking
+ * navigation. We subtract 6 rows for the prompt header / footer / margins
+ * and floor at 5 so very small terminals still get a usable view.
+ *
+ * Returns undefined when stdout isn't a TTY (e.g. piped output) so clack
+ * uses its default render path.
+ */
+function ttyMaxItems(): number | undefined {
+  const rows = process.stdout.rows;
+  if (!rows || !Number.isFinite(rows)) return undefined;
+  return Math.max(5, rows - 6);
+}
 
 function banner(): string {
   return [
@@ -562,6 +605,7 @@ async function cmdDev(opts: {
     }),
     required: false,
     initialValues: [] as CleanTarget[],
+    maxItems: ttyMaxItems(),
   });
 
   if (p.isCancel(selected) || !Array.isArray(selected) || selected.length === 0) {
@@ -676,6 +720,7 @@ async function cmdSystem(opts: { dryRun: boolean }): Promise<void> {
       hint: t.description,
     })),
     required: false,
+    maxItems: ttyMaxItems(),
   });
   if (p.isCancel(selected) || !Array.isArray(selected) || selected.length === 0) {
     p.cancel("Nothing selected.");
@@ -811,25 +856,35 @@ async function cmdFindModules(opts: { dryRun: boolean; fromCache: boolean }): Pr
     return;
   }
 
-  // Sort biggest first, show top 30 by default.
   const sorted = [...paths].sort((a, b) => b.size - a.size);
+
+  // Print only the top 10 as a preview — the searchable prompt below shows
+  // the whole list with type-to-filter, so dumping all 312 lines as a wall
+  // of text first is wasted scroll-back.
   console.log("");
-  for (const f of sorted.slice(0, 30)) {
+  for (const f of sorted.slice(0, 10)) {
     console.log(`  ${pad(formatBytes(f.size), 10, "right")}  ${pc.dim(f.path)}`);
   }
-  if (sorted.length > 30) {
-    console.log(pc.dim(`  … and ${sorted.length - 30} more.`));
+  if (sorted.length > 10) {
+    console.log(pc.dim(`  … and ${sorted.length - 10} more — start typing in the next prompt to filter.`));
   }
   console.log("");
 
-  const selected = await p.multiselect({
-    message: "Select node_modules folders to remove",
+  // autocompleteMultiselect lets the user type to filter — essential when
+  // there are 100s of node_modules across years of side projects. Falls
+  // back gracefully to a regular paginated list when the user types
+  // nothing.
+  const selected = await p.autocompleteMultiselect({
+    message: "Select node_modules to remove (type to filter, Space to toggle, Enter to confirm)",
     options: sorted.map((f) => ({
       value: f.path,
-      label: `${formatBytes(f.size).padStart(10)}  ${f.path.replace(/^.*\/([^/]+\/node_modules)$/, "…/$1")}`,
+      // Allow ~30 cols for size column + prompt chrome (cursor, brackets,
+      // spacing). The full path stays in `hint` for the detail line.
+      label: `${pad(formatBytes(f.size), 10, "right")}  ${shortenPath(f.path, 30)}`,
       hint: f.path,
     })),
     required: false,
+    maxItems: ttyMaxItems(),
   });
 
   if (p.isCancel(selected) || !Array.isArray(selected) || selected.length === 0) {
