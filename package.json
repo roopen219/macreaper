@@ -11,8 +11,10 @@
     "start": "bun src/cli.ts",
     "scan": "bun src/cli.ts scan",
     "dev": "bun --watch src/cli.ts",
-    "build": "bun build --compile --target=bun-darwin-arm64 --outfile=bin/macreaper src/cli.ts",
-    "build:intel": "bun build --compile --target=bun-darwin-x64 --outfile=bin/macreaper-intel src/cli.ts"
+    "compile:macos-arm64": "bun build --compile --target=bun-darwin-arm64 --outfile=bin/macreaper-darwin-arm64 src/cli.ts",
+    "compile:macos-x64": "bun build --compile --target=bun-darwin-x64 --outfile=bin/macreaper-darwin-x64 src/cli.ts",
+    "build": "bun run compile:macos-arm64",
+    "build:intel": "bun run compile:macos-x64"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",

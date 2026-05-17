@@ -10,6 +10,20 @@
 # behavior in our test runs only matches when assembled on macOS.
 # Cross-compiling x86_64 from the arm64 runner works fine — Bun handles
 # both --target=bun-darwin-arm64 and --target=bun-darwin-x64 natively.
+#
+# CODESIGNING APPROACH:
+#   We use the same ad-hoc-signing pattern as the Truto CLI, which avoids
+#   the $99/yr Apple Developer Program entirely:
+#     1. BUN_NO_CODESIGN_MACHO_BINARY=1 during build — works around the
+#        v1.3.12+ regression where Bun's auto-codesigning produces a
+#        malformed LC_CODE_SIGNATURE that breaks subsequent codesign calls.
+#        (See https://github.com/oven-sh/bun/issues/29361)
+#     2. `codesign --sign -` after build — ad-hoc seals the binary so the
+#        kernel accepts it on modern macOS, but does NOT trust an Apple
+#        identity, so Gatekeeper will still quarantine on download.
+#     3. Users install via `install.sh`, which strips the quarantine
+#        attribute (`xattr -d com.apple.quarantine`) and re-seals locally,
+#        producing a frictionless install with zero Apple cost.
 
 name: release
 
@@ -57,19 +71,36 @@ jobs:
         # to ship a broken binary.
         run: bunx tsc --noEmit
 
-      - name: Build arm64 binary
-        run: bun run build
+      - name: Compile macOS binaries
+        # BUN_NO_CODESIGN_MACHO_BINARY=1 disables Bun's internal codesign
+        # step. Required to work around the v1.3.12+ regression where the
+        # auto-emitted LC_CODE_SIGNATURE has a truncated datasize and
+        # subsequent `codesign` calls reject it with "invalid or unsupported
+        # format for signature".
+        env:
+          BUN_NO_CODESIGN_MACHO_BINARY: "1"
+        run: |
+          bun run compile:macos-arm64
+          bun run compile:macos-x64
 
-      - name: Build x86_64 (Intel) binary
-        run: bun run build:intel
-
-      - name: Compute SHA256 checksums
-        # macOS `shasum -a 256` matches what `sha256sum` produces on Linux,
-        # so users can verify with either tool. We write to a single
-        # checksums file that lives next to the binaries.
+      - name: Ad-hoc codesign macOS binaries
+        # `--sign -` is ad-hoc: the binary becomes internally consistent
+        # (kernel accepts it on newer macOS) but is not bound to any Apple
+        # Developer identity. install.sh re-seals locally after stripping
+        # the quarantine attr, which is what produces the no-warning UX.
         working-directory: bin
         run: |
-          shasum -a 256 macreaper macreaper-intel > SHA256SUMS
+          codesign --sign - --force macreaper-darwin-arm64
+          codesign --sign - --force macreaper-darwin-x64
+          codesign -vvv --verify macreaper-darwin-arm64
+          codesign -vvv --verify macreaper-darwin-x64
+
+      - name: Compute SHA256 checksums
+        # macOS `shasum -a 256` produces the same format as Linux `sha256sum`,
+        # so users can verify with either tool.
+        working-directory: bin
+        run: |
+          shasum -a 256 macreaper-darwin-arm64 macreaper-darwin-x64 > SHA256SUMS
           cat SHA256SUMS
 
       - name: Resolve release tag
@@ -93,8 +124,8 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — uploading binaries with --clobber."
             gh release upload "$TAG" \
-              bin/macreaper \
-              bin/macreaper-intel \
+              bin/macreaper-darwin-arm64 \
+              bin/macreaper-darwin-x64 \
               bin/SHA256SUMS \
               --clobber
           else
@@ -102,7 +133,7 @@ jobs:
               --title "macreaper $TAG" \
               --generate-notes \
               --verify-tag \
-              bin/macreaper \
-              bin/macreaper-intel \
+              bin/macreaper-darwin-arm64 \
+              bin/macreaper-darwin-x64 \
               bin/SHA256SUMS
           fi
