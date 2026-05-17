@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Compiled binaries
+bin/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env
+.env
+.env.local
+*.local
+
+# Bun
+.bun-cache/
+
+# Logs / debug
+*.log
+npm-debug.log*
+
+# Test / coverage output
+coverage/
+*.lcov

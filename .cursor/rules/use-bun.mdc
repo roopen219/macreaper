@@ -1,0 +1,18 @@
+---
+description: Always use Bun instead of Node.js
+alwaysApply: true
+---
+
+# Use Bun, not Node
+
+This project uses **Bun** as its JavaScript/TypeScript runtime, package manager, and test runner.
+
+## Rules
+
+- Use `bun` to run scripts, not `node` (e.g. `bun run dev`, not `node index.ts`).
+- Use `bun install` / `bun add` / `bun remove` for dependency management, not `npm`, `yarn`, or `pnpm`.
+- Use `bun test` for testing, not `jest`, `vitest`, or `node --test`.
+- Use `bunx` instead of `npx` for one-off package execution.
+- Use `bun build` when bundling is needed.
+- Prefer Bun-native APIs (`Bun.serve`, `Bun.file`, `Bun.write`, etc.) over Node equivalents when available.
+- If a `package.json` script exists, run it with `bun run <script>`.

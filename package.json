@@ -1,0 +1,31 @@
+{
+  "name": "macreaper",
+  "version": "0.1.0",
+  "description": "A Bun-powered disk space reaper for macOS developers. Find what's eating your SSD, clean safely, prevent the buildup.",
+  "type": "module",
+  "bin": {
+    "macreaper": "./src/cli.ts",
+    "reap": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "scan": "bun src/cli.ts scan",
+    "dev": "bun --watch src/cli.ts",
+    "build": "bun build --compile --target=bun-darwin-arm64 --outfile=bin/macreaper src/cli.ts",
+    "build:intel": "bun build --compile --target=bun-darwin-x64 --outfile=bin/macreaper-intel src/cli.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "picocolors": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "os": ["darwin"],
+  "keywords": ["macos", "disk", "cleanup", "developer", "bun", "cli", "storage"],
+  "license": "MIT"
+}
