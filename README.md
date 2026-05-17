@@ -57,10 +57,36 @@ macreaper scan
 Want a single binary you can drop on any Mac?
 
 ```bash
-bun run build       # Apple Silicon
-bun run build:intel # Intel
-# → bin/macreaper
+bun run build       # Apple Silicon → bin/macreaper
+bun run build:intel # Intel         → bin/macreaper-intel
 ```
+
+### One-line install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/roopen219/macreaper/main/install.sh | bash
+```
+
+The installer downloads the right binary for your CPU, verifies its SHA256 against the release's `SHA256SUMS`, strips macOS's quarantine attribute, ad-hoc re-signs the binary so Gatekeeper accepts it, and adds `~/.macreaper/bin` to your PATH. To install elsewhere set `MACREAPER_INSTALL_DIR=/usr/local/bin`. To pin a version set `MACREAPER_VERSION=v0.2.0`.
+
+### Manual install
+
+If you'd rather grab a binary by hand from [Releases](https://github.com/roopen219/macreaper/releases):
+
+```bash
+# Apple Silicon
+curl -L -o macreaper https://github.com/roopen219/macreaper/releases/latest/download/macreaper-darwin-arm64
+# Intel
+curl -L -o macreaper https://github.com/roopen219/macreaper/releases/latest/download/macreaper-darwin-x64
+
+chmod +x macreaper
+# macOS Gatekeeper will block on first run because we don't pay for an
+# Apple Developer ID. Strip the quarantine attribute to bypass:
+xattr -d com.apple.quarantine macreaper
+sudo mv macreaper /usr/local/bin/
+```
+
+Every release ships a `SHA256SUMS` file you can verify with `shasum -a 256 -c SHA256SUMS`.
 
 ## Commands
 

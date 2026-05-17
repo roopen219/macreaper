@@ -1,0 +1,139 @@
+# Release workflow.
+#
+# Trigger: pushing a tag of the form `v*` (e.g. v0.2.0, v1.0.0-rc.1).
+# Outputs: a GitHub Release with both macOS binaries attached + SHA256
+# checksums + auto-generated changelog notes from PRs / commits since the
+# previous tag.
+#
+# We build on macos-latest (currently Apple Silicon) because Bun's
+# --compile target needs the OS-matching runtime, and BSD `find`/`stat`
+# behavior in our test runs only matches when assembled on macOS.
+# Cross-compiling x86_64 from the arm64 runner works fine — Bun handles
+# both --target=bun-darwin-arm64 and --target=bun-darwin-x64 natively.
+#
+# CODESIGNING APPROACH:
+#   We use the same ad-hoc-signing pattern as the Truto CLI, which avoids
+#   the $99/yr Apple Developer Program entirely:
+#     1. BUN_NO_CODESIGN_MACHO_BINARY=1 during build — works around the
+#        v1.3.12+ regression where Bun's auto-codesigning produces a
+#        malformed LC_CODE_SIGNATURE that breaks subsequent codesign calls.
+#        (See https://github.com/oven-sh/bun/issues/29361)
+#     2. `codesign --sign -` after build — ad-hoc seals the binary so the
+#        kernel accepts it on modern macOS, but does NOT trust an Apple
+#        identity, so Gatekeeper will still quarantine on download.
+#     3. Users install via `install.sh`, which strips the quarantine
+#        attribute (`xattr -d com.apple.quarantine`) and re-seals locally,
+#        producing a frictionless install with zero Apple cost.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Allow manual re-runs against an existing tag from the Actions UI.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist, e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write   # required for `gh release create`
+
+jobs:
+  build-and-release:
+    name: Build & publish ${{ github.ref_name }}
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          # Workflow-dispatch case: check out the requested tag rather than
+          # the branch the workflow was triggered from.
+          ref: ${{ inputs.tag || github.ref }}
+          # Needed so `gh release create --generate-notes` can diff against
+          # the previous tag.
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check
+        # Fail fast if the tagged commit doesn't type-check — we never want
+        # to ship a broken binary.
+        run: bunx tsc --noEmit
+
+      - name: Compile macOS binaries
+        # BUN_NO_CODESIGN_MACHO_BINARY=1 disables Bun's internal codesign
+        # step. Required to work around the v1.3.12+ regression where the
+        # auto-emitted LC_CODE_SIGNATURE has a truncated datasize and
+        # subsequent `codesign` calls reject it with "invalid or unsupported
+        # format for signature".
+        env:
+          BUN_NO_CODESIGN_MACHO_BINARY: "1"
+        run: |
+          bun run compile:macos-arm64
+          bun run compile:macos-x64
+
+      - name: Ad-hoc codesign macOS binaries
+        # `--sign -` is ad-hoc: the binary becomes internally consistent
+        # (kernel accepts it on newer macOS) but is not bound to any Apple
+        # Developer identity. install.sh re-seals locally after stripping
+        # the quarantine attr, which is what produces the no-warning UX.
+        working-directory: bin
+        run: |
+          codesign --sign - --force macreaper-darwin-arm64
+          codesign --sign - --force macreaper-darwin-x64
+          codesign -vvv --verify macreaper-darwin-arm64
+          codesign -vvv --verify macreaper-darwin-x64
+
+      - name: Compute SHA256 checksums
+        # macOS `shasum -a 256` produces the same format as Linux `sha256sum`,
+        # so users can verify with either tool.
+        working-directory: bin
+        run: |
+          shasum -a 256 macreaper-darwin-arm64 macreaper-darwin-x64 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Resolve release tag
+        id: tag
+        # `inputs.tag` is set on workflow_dispatch; otherwise the tag comes
+        # from github.ref_name (the pushed tag).
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG"
+
+      - name: Create / update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          # If the release already exists (e.g. workflow_dispatch re-run),
+          # upload binaries to it with --clobber. Otherwise create fresh.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading binaries with --clobber."
+            gh release upload "$TAG" \
+              bin/macreaper-darwin-arm64 \
+              bin/macreaper-darwin-x64 \
+              bin/SHA256SUMS \
+              --clobber
+          else
+            gh release create "$TAG" \
+              --title "macreaper $TAG" \
+              --generate-notes \
+              --verify-tag \
+              bin/macreaper-darwin-arm64 \
+              bin/macreaper-darwin-x64 \
+              bin/SHA256SUMS
+          fi
