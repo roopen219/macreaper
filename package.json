@@ -1,6 +1,6 @@
 {
   "name": "macreaper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Bun-powered disk space reaper for macOS developers. Find what's eating your SSD, clean safely, prevent the buildup.",
   "type": "module",
   "bin": {
