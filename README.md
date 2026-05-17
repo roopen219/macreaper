@@ -57,10 +57,25 @@ macreaper scan
 Want a single binary you can drop on any Mac?
 
 ```bash
-bun run build       # Apple Silicon
-bun run build:intel # Intel
-# → bin/macreaper
+bun run build       # Apple Silicon → bin/macreaper
+bun run build:intel # Intel         → bin/macreaper-intel
 ```
+
+Or grab the latest pre-built binary from [Releases](https://github.com/roopen219/macreaper/releases):
+
+```bash
+# Apple Silicon
+curl -L -o macreaper https://github.com/roopen219/macreaper/releases/latest/download/macreaper
+chmod +x macreaper
+sudo mv macreaper /usr/local/bin/
+
+# Intel
+curl -L -o macreaper https://github.com/roopen219/macreaper/releases/latest/download/macreaper-intel
+chmod +x macreaper
+sudo mv macreaper /usr/local/bin/
+```
+
+Every release ships a `SHA256SUMS` file you can verify with `shasum -a 256 -c SHA256SUMS`.
 
 ## Commands
 
