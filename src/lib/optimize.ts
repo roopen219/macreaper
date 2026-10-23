@@ -437,6 +437,88 @@ export async function getRecommendations(): Promise<Recommendation[]> {
     });
   }
 
+  // ── Spotlight ─────────────────────────────────────────────────────────────
+  //
+  // Spotlight bloat is one of the worst on dev machines because every file
+  // under node_modules / .git / target / build gets indexed by default. The
+  // tips below ladder from "least disruptive" (exclude dev folders) to
+  // "nuclear" (recovery-mode rebuild).
+
+  // 38. The single highest-ROI Spotlight tip: exclude your dev tree.
+  // System Settings UI is the discoverable path; the `.metadata_never_index`
+  // marker is the scriptable per-folder one. Both still work on Sequoia 15.x.
+  recs.push({
+    title: "Exclude dev folders from Spotlight (single biggest Spotlight win)",
+    detail:
+      "Every file under node_modules / .git / target / Pods / build gets indexed by default — on a dev machine that's millions of files Spotlight has no reason to ever surface. " +
+      "Two ways: " +
+      "(1) System Settings → Spotlight → Search Privacy → '+' and add ~/work (or wherever your code lives) — easiest and persists across reboots. " +
+      "(2) Drop a `.metadata_never_index` marker in each folder you want skipped (works even if the parent is indexed). " +
+      "After excluding, run `sudo mdutil -E /` once to rebuild without those paths.",
+    command: "touch ~/work/.metadata_never_index",
+    kind: "manual",
+  });
+
+  // 39. Bulk-mark every node_modules. Reuses the find-modules cache if it
+  // exists so we don't re-walk $HOME. Side-effect-free for already-marked dirs.
+  if (pathExists("~/Library/Caches/macreaper/node-modules.json")) {
+    recs.push({
+      title: "Drop `.metadata_never_index` into every node_modules",
+      detail:
+        "Bulk-applies the (2) trick above to every node_modules `macreaper find-modules` discovered. The marker file is ~0 bytes and Spotlight respects it on the next index pass — no need to delete the existing index first.",
+      command:
+        "bun -e \"const f=JSON.parse(await Bun.file(`${process.env.HOME}/Library/Caches/macreaper/node-modules.json`).text());for(const p of f.paths)await Bun.write(p.path+'/.metadata_never_index','');\"",
+      kind: "auto",
+    });
+  }
+
+  // 40. CoreSpotlight bloat — the user-side pile that grows for no good
+  // reason on long-running installs.
+  if (pathExists("~/Library/Metadata/CoreSpotlight")) {
+    recs.push({
+      title: "Clear bloated CoreSpotlight metadata (Priority / SpotlightKnowledgeEvents)",
+      detail:
+        "~/Library/Metadata/CoreSpotlight regularly hits 10–100 GB on dev machines. The `Priority` and `NSFileProtectionCompleteUntilFirstUserAuthentication` subdirs are the usual offenders. Safe to delete from a normal terminal — Spotlight rebuilds what it actually needs (expect a few hours of background CPU). Quit Spotlight-heavy apps (Mail, Notes) first if possible.",
+      command: "rm -rf ~/Library/Metadata/CoreSpotlight/*",
+      kind: "manual",
+    });
+  }
+
+  // 41. mdutil category control — narrow disable when you want indexing
+  // mostly-on but not for the boot volume's Time Machine snapshots.
+  recs.push({
+    title: "Disable Spotlight indexing on external & backup volumes",
+    detail:
+      "External drives (Time Machine targets, scratch SSDs, backup volumes) usually shouldn't be indexed at all. `sudo mdutil -i off /Volumes/<name>` disables and frees the on-volume `.Spotlight-V100`. For the boot volume, prefer Search Privacy exclusions (above) over a full disable, because a full disable also breaks the menubar Spotlight search.",
+    command: "sudo mdutil -i off /Volumes/<external-drive-name>",
+    kind: "manual",
+  });
+
+  // 42. Rebuild — the right knob when the index is *corrupt*, not when
+  // it's just large. People reach for this too often; flag it as a fix, not
+  // a space-saver.
+  recs.push({
+    title: "Rebuild Spotlight (only when search is broken, not to save space)",
+    detail:
+      "`sudo mdutil -E /` erases the boot-volume index and rebuilds from scratch. Use this when search returns wrong/no results, or after adding Search Privacy exclusions so the new index respects them. It does NOT permanently save space — the rebuilt index will grow back to the same size unless you also exclude folders.",
+    command: "sudo mdutil -E /",
+    kind: "manual",
+  });
+
+  // 43. The nuclear option for .Spotlight-V100. Requires Recovery Mode
+  // because the path is SIP-protected from regular root.
+  if (pathExists("/System/Volumes/Data/.Spotlight-V100") || pathExists("/.Spotlight-V100")) {
+    recs.push({
+      title: "Nuclear: delete /.Spotlight-V100 from Recovery Mode (only if multi-GB bloat)",
+      detail:
+        "The volume-level Spotlight index is root + SIP-protected; normal `sudo rm` will fail. If `macreaper scan` reports /.Spotlight-V100 in the tens of GB, the cleanup procedure is: " +
+        "(1) Shut down. (2) Apple Silicon: hold power until 'Loading startup options'; Intel: hold Cmd+R at boot. " +
+        "(3) Utilities → Terminal. (4) Run `rm -rf /System/Volumes/Data/.Spotlight-V100`. (5) Reboot. " +
+        "(6) Before Spotlight reindexes, add your dev folders to Search Privacy — otherwise it'll grow right back. Time investment: ~5 min for the delete, ~hours for the rebuild.",
+      kind: "manual",
+    });
+  }
+
   // 37. Cursor / VS Code SQLite state DBs — VACUUM, never delete.
   if (
     pathExists("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb") ||
